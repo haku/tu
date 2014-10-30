@@ -77,6 +77,21 @@ public class Main {
 
 	}
 
+	private static class TransferStats {
+		private final long bytesReceived;
+		private final long packetsSent;
+
+		public TransferStats (final long bytesReceived, final long packetsSent) {
+			this.bytesReceived = bytesReceived;
+			this.packetsSent = packetsSent;
+		}
+
+		@Override
+		public String toString () {
+			return String.format("%s bytes --> %s packets", this.bytesReceived, this.packetsSent);
+		}
+	}
+
 	private static class SocketToUdp implements Runnable {
 
 		private final Socket socket;
@@ -91,34 +106,36 @@ public class Main {
 		public void run () {
 			try {
 				LOG.info("start: {} --> udp:{}.", this.socket.getInetAddress(), this.udpPort);
-				final long total = toUdp(this.socket.getInputStream(), this.udpPort);
-				LOG.info("end: {} --> udp:{} {} bytes.", this.socket.getInetAddress(), this.udpPort, total);
+				final TransferStats stats = toUdp(this.socket.getInputStream(), this.udpPort);
+				LOG.info("end: {} --> udp:{} ({}).", this.socket.getInetAddress(), this.udpPort, stats);
 			}
 			catch (final Throwable e) {
 				LOG.error("TCP to UDP stream died.", e);
 			}
 		}
 
-		private static long toUdp (final InputStream is, final int udpPort) throws IOException {
+		private static TransferStats toUdp (final InputStream is, final int udpPort) throws IOException {
 			final byte[] lengthBuff = new byte[2];
 			final byte[] contentBuff = new byte[1024 * 1024];
 			final DatagramSocket udpSocket = new DatagramSocket();
 			try {
 				final DatagramPacket udpPacket = new DatagramPacket(contentBuff, contentBuff.length, InetAddress.getLocalHost(), udpPort);
-				long total = 0;
+				long totalBytesReceived = 0;
+				long totalPacketsSent = 0;
 				for (;;) {
 					final int ll = ReadHelper.readFully(is, lengthBuff, 0, lengthBuff.length);
 					if (ll < lengthBuff.length) break;
-					total += ll;
+					totalBytesReceived += ll;
 					final int length = twoBytesToInt(lengthBuff);
 					final int cl = ReadHelper.readFully(is, contentBuff, 0, length);
 					if (cl < length) break;
-					total += cl;
+					totalBytesReceived += cl;
 					udpPacket.setLength(cl);
 					udpSocket.send(udpPacket);
+					totalPacketsSent++;
 					sleepQuietly(1);
 				}
-				return total;
+				return new TransferStats(totalBytesReceived, totalPacketsSent);
 			}
 			finally {
 				IOUtils.closeQuietly(udpSocket);
@@ -129,11 +146,11 @@ public class Main {
 			return (b[0] << 8) | (b[1] & 0xFF);
 		}
 
-		private static void sleepQuietly (final int i) {
+		private static void sleepQuietly (final int t) {
 			try {
-				Thread.sleep(1);
+				Thread.sleep(t);
 			}
-			catch (final InterruptedException e) {}
+			catch (final InterruptedException e) {/* do not care. */}
 		}
 
 	}
