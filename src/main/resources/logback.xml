@@ -9,10 +9,22 @@
 		</encoder>
 	</appender>
 
+  <appender name="fs" class="ch.qos.logback.core.rolling.RollingFileAppender">
+    <file>c:/tu/tu.log</file>
+    <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+      <fileNamePattern>c:/tu/tu.%d{yyyy-MM-dd}.gz</fileNamePattern>
+      <maxHistory>5</maxHistory>
+    </rollingPolicy>
+    <encoder>
+      <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%10.10thread] %25.25logger{25} %.-1level %msg%n</pattern>
+    </encoder>
+  </appender>
+
 	<logger name="com.vaguehope.tu" level="INFO" />
 
 	<root level="info">
 		<appender-ref ref="default" />
+		<appender-ref ref="fs" />
 	</root>
 
 </configuration>
