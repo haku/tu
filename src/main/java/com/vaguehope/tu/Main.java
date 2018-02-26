@@ -147,7 +147,7 @@ public class Main {
 					if (cl < length) break;
 					totalBytesReceived += cl;
 					udpPacket.setLength(cl);
-					udpSocket.send(udpPacket);
+					sendToOmnia(udpSocket, udpPacket);
 					totalPacketsSent++;
 					sleepQuietly(rtpPackageDelay);
 				}
@@ -155,6 +155,10 @@ public class Main {
 			} finally {
 				IOUtils.closeQuietly(udpSocket);
 			}
+		}
+
+		private static synchronized void sendToOmnia(final DatagramSocket udpSocket, final DatagramPacket udpPacket) throws IOException {
+			udpSocket.send(udpPacket);
 		}
 
 		private static int twoBytesToInt (final byte[] b) {
