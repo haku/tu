@@ -23,7 +23,7 @@ Compiling and Running
 ---------------------
 
 This Java project is build using Maven, run `mvn clean install`.
-This creates a runnable jar, `java -jar ./target/tu-1-SNAPSHOT-jar-with-dependencies.jar`.
+This creates a runnable jar, `java -jar ./target/tu-1.1-SNAPSHOT-jar-with-dependencies.jar`.
 
 Logging
 -------
@@ -35,5 +35,10 @@ Configure logging by editing `./src/main/resources/logback.xml` and recompiling.
 Performance
 -----------
 
-TU will sleep for 1 millisecond between sending UDP packets.
+By default TU will sleep for 1 millisecond between sending UDP packets.
 This is to avoid flooding the receiver.
+
+You can pass argument for sleep time when application is started.
+
+This application is multithreaded and there is a thread per every open incoming socket.
+In order to avoid flooding receiver with concurrent writes the threads are synchronized.
