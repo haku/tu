@@ -20,16 +20,28 @@ import org.slf4j.LoggerFactory;
 
 public class Main {
 
+	public static final int DEFAULT_RTP_PACKAGE_DELAY_MS = 1;
 	private static final int TRAFFIC_CLASS = 0x18; // == 0x10 | 0x08 == IPTOS_THROUGHPUT | IPTOS_LOWDELAY
 	protected static final Logger LOG = LoggerFactory.getLogger(Main.class);
 
 	public static void main (final String[] args) throws InterruptedException, ExecutionException {
 		try {
-			LOG.info("tu desu~");
+			LOG.info("tu starting");
+
+			int rtpPackageDelay = DEFAULT_RTP_PACKAGE_DELAY_MS;
+			if (args.length > 0) {
+				try {
+					rtpPackageDelay = Integer.parseInt(args[0]);
+				} catch (NumberFormatException e) {
+					LOG.error("Argument" + args[0] + " must be an integer.");
+					System.exit(1);
+				}
+			}
+			LOG.info("Using " + rtpPackageDelay + "ms delay between RTP packages");
 			final ExecutorService es = Executors.newCachedThreadPool();
 			final Collection<Future<?>> futures = new ArrayList<Future<?>>();
 			for (int port = 5000; port < 5050; port += 2) {
-				futures.add(es.submit(new Acceptor(port, es)));
+				futures.add(es.submit(new Acceptor(port, es, rtpPackageDelay)));
 			}
 			for (final Future<?> future : futures) {
 				future.get();
@@ -44,10 +56,12 @@ public class Main {
 
 		private final int port;
 		private final ExecutorService es;
+		private int rtpPackageDelay;
 
-		public Acceptor (final int port, final ExecutorService es) {
+		public Acceptor (final int port, final ExecutorService es, final int rtpPackageDelay) {
 			this.port = port;
 			this.es = es;
+			this.rtpPackageDelay = rtpPackageDelay;
 		}
 
 		@Override
@@ -67,7 +81,7 @@ public class Main {
 					LOG.info("Listening on tcp:{}...", serverSocket.getLocalPort());
 					final Socket socket = serverSocket.accept();
 					socket.setTrafficClass(TRAFFIC_CLASS);
-					this.es.submit(new SocketToUdp(socket, socket.getLocalPort()));
+					this.es.submit(new SocketToUdp(socket, socket.getLocalPort(), rtpPackageDelay));
 				}
 			}
 			finally {
@@ -96,17 +110,19 @@ public class Main {
 
 		private final Socket socket;
 		private final int udpPort;
+		private int rtpPackageDelay;
 
-		public SocketToUdp (final Socket socket, final int localPort) {
+		public SocketToUdp (final Socket socket, final int localPort, final int rtpPackageDelay) {
 			this.socket = socket;
 			this.udpPort = localPort;
+			this.rtpPackageDelay = rtpPackageDelay;
 		}
 
 		@Override
 		public void run () {
 			try {
 				LOG.info("start: {} --> udp:{}.", this.socket.getInetAddress(), this.udpPort);
-				final TransferStats stats = toUdp(this.socket.getInputStream(), this.udpPort);
+				final TransferStats stats = toUdp(this.socket.getInputStream(), this.udpPort, this.rtpPackageDelay);
 				LOG.info("end: {} --> udp:{} ({}).", this.socket.getInetAddress(), this.udpPort, stats);
 			}
 			catch (final Throwable e) {
@@ -114,7 +130,7 @@ public class Main {
 			}
 		}
 
-		private static TransferStats toUdp (final InputStream is, final int udpPort) throws IOException {
+		private static TransferStats toUdp (final InputStream is, final int udpPort, final int rtpPackageDelay) throws IOException {
 			final byte[] lengthBuff = new byte[2];
 			final byte[] contentBuff = new byte[1024 * 1024];
 			final DatagramSocket udpSocket = new DatagramSocket();
@@ -131,15 +147,18 @@ public class Main {
 					if (cl < length) break;
 					totalBytesReceived += cl;
 					udpPacket.setLength(cl);
-					udpSocket.send(udpPacket);
+					sendToOmnia(udpSocket, udpPacket);
 					totalPacketsSent++;
-					sleepQuietly(1);
+					sleepQuietly(rtpPackageDelay);
 				}
 				return new TransferStats(totalBytesReceived, totalPacketsSent);
-			}
-			finally {
+			} finally {
 				IOUtils.closeQuietly(udpSocket);
 			}
+		}
+
+		private static synchronized void sendToOmnia(final DatagramSocket udpSocket, final DatagramPacket udpPacket) throws IOException {
+			udpSocket.send(udpPacket);
 		}
 
 		private static int twoBytesToInt (final byte[] b) {
